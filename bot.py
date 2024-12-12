@@ -7,6 +7,8 @@ import hateclassify as hc
 from apikeys import *
 from hateclassify import *
 
+from datetime import timedelta
+
 class MyClient(discord.Client):
 
     def __init__(self, intents):
@@ -45,7 +47,7 @@ class MyClient(discord.Client):
             await message.delete()
             embed: object = discord.Embed(
                 title = "Warning!",
-                description = f"Please review the following comments carefully as the message sent from <@{message.author.id}> may contain sensitive content.",
+                description = f"Please review the following comments carefully before viewing the message sent by <@{message.author.id}> as it may contain sensitive content or misinformation.",
                 color = 0xea3e3e
             )
             embed.add_field(name = "", value = f"||{message.content}||", inline = False)
@@ -53,12 +55,42 @@ class MyClient(discord.Client):
             await message.channel.send(embed = embed)
           
             response = self.cursor.execute(f'SELECT social_credit FROM censorship WHERE user_id = {message.author.id}').fetchall()
-            newScore = int(response[0][0]) - score
+
+            # Manages rep score
+            newScore = int(response[0][0]) - score*10
+
+            # controls the Direct Message Embed skip over this bit
+            directMsg: object = discord.Embed(
+                title = "Warning!",
+                description = f"Please review the following comments carefully as your message has been flagged for containing sensitive content or misinformation. If you think this is a mistake, please contact server admin. NOOT NOOT!",
+                color = 0xfee12b
+            )
+            directMsg.add_field(name = "You said:", value = f"\"{message.content}\"", inline = False)
+            directMsg.add_field(name = "", value = f"You have lost **{score}** Rep.", inline = False)
+            directMsg.add_field(name = "", value = f"Your new Rep. Score is **{newScore}**!", inline = False)
+            await message.author.send(embed = directMsg)
+
+            if newScore <= 0:
+                # Time out logic
+                timeout = 10 #seconds
+                await message.author.timeout(timedelta(seconds = timeout))
+                newScore = 1000
+            
+                directMsg: object = discord.Embed(
+                    title = "Timeout Notice",
+                    description = f"Please review the following comments carefully as your message has been flagged for containing sensitive content or misinformation. If you think this is a mistake, please contact server admin. NOOT NOOT!",
+                    color = 0xfee12b
+                )
+                directMsg.add_field(name = "You said:", value = f"\"{message.content}\" \nDue to previous messages including this one, you have received a {timeout} second timeout.", inline = False)
+                await message.author.send(embed = directMsg)
+
             self.cursor.execute(f'REPLACE INTO censorship (user_id, social_credit) VALUES({message.author.id}, {newScore});')
         response = self.cursor.execute(f'SELECT * FROM censorship WHERE user_id = {message.author.id};').fetchall()
         print(response)
 
-    
+        
+
+
 
 if __name__ == '__main__':
     intents: object = discord.Intents.default()
